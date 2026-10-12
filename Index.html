@@ -1,0 +1,183 @@
+
+<!DOCTYPE html>
+<html lang="tl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Tumbang Lata 3D</title>
+<style>
+body{margin:0;background:#1c2930;color:white;font-family:Arial;overflow:hidden}
+#hud{position:absolute;top:10px;left:10px;z-index:2;background:#000b;padding:12px;border-radius:10px}
+button{padding:12px;border:2px solid white;border-radius:8px;font-weight:bold}
+#join{background:#777;color:white}
+#join.ready{background:#ffd400;color:black}
+#controls{position:absolute;bottom:15px;left:10px;right:10px;display:flex;justify-content:space-between}
+.group{display:flex;gap:6px}
+.ctrl{background:#18252ddd;color:white;width:56px;height:56px;border-radius:50%}
+</style>
+</head>
+<body>
+<div id="hud">
+<b>🥫 TUMBANG LATA 3D</b><br>
+Players: <span id="count">1/10</span><br>
+Role: <span id="role">Waiting</span><br>
+Lata: <span id="can">Nakatayo</span><br><br>
+<button id="join">SUMALI</button>
+<div id="msg">Pindutin ang SUMALI.</div>
+</div>
+<div id="controls">
+<div class="group">
+<button class="ctrl" id="left">◀</button>
+<button class="ctrl" id="forward">▲</button>
+<button class="ctrl" id="back">▼</button>
+<button class="ctrl" id="right">▶</button>
+</div>
+<div class="group">
+<button class="ctrl" id="throw">HAGIS</button>
+<button class="ctrl" id="run">TAKBO</button>
+</div>
+</div>
+<script type="module">
+import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js';
+
+const scene=new THREE.Scene();
+scene.background=new THREE.Color(0x87b8d5);
+const camera=new THREE.PerspectiveCamera(65,innerWidth/innerHeight,.1,100);
+const renderer=new THREE.WebGLRenderer({antialias:true});
+renderer.setSize(innerWidth,innerHeight);
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+document.body.appendChild(renderer.domElement);
+scene.add(new THREE.HemisphereLight(0xffffff,0x526044,2));
+const light=new THREE.DirectionalLight(0xffffff,2);
+light.position.set(5,10,5);scene.add(light);
+
+function material(c){return new THREE.MeshStandardMaterial({color:c})}
+const ground=new THREE.Mesh(new THREE.PlaneGeometry(100,100),material(0x659052));
+ground.rotation.x=-Math.PI/2;scene.add(ground);
+
+function cube(x,y,z,sx,sy,sz,color){
+ const m=new THREE.Mesh(new THREE.BoxGeometry(sx,sy,sz),material(color));
+ m.position.set(x,y,z);scene.add(m);return m;
+}
+for(let i=0;i<12;i++){
+ const a=i*Math.PI/6;
+ cube(Math.cos(a)*18,2,Math.sin(a)*18,4,4,4,0xc9aa83);
+}
+const can=cube(0,.5,0,.7,1,.7,0xd0d5d8);
+const players=[];
+for(let i=0;i<10;i++){
+ const body=cube(0,1,0,.7,1.5,.5,i===0?0x2980b9:0xe67e22);
+ const head=new THREE.Mesh(new THREE.SphereGeometry(.3,12,10),material(0xf0c49b));
+ head.position.y=2;body.add(head);
+ players.push({mesh:body,x:0,z:0,role:'player',bot:i>0});
+}
+const me=players[0];
+const keys={};
+let started=false,down=false,hasShoe=true,sprinting=false;
+let angle=Math.PI,shoe=null;
+
+function updateUI(){
+ document.getElementById('role').textContent=me.role==='taya'?'TAYA':'Manlalaro';
+ document.getElementById('can').textContent=down?'Natumba':'Nakatayo';
+}
+document.getElementById('join').onclick=()=>{
+ if(started)return;
+ const b=document.getElementById('join'),msg=document.getElementById('msg');
+ b.disabled=true;b.textContent='NAGHAHANAP...';
+ let n=1;
+ const timer=setInterval(()=>{
+  n++;document.getElementById('count').textContent=n+'/10';
+  if(n===10){
+   clearInterval(timer);started=true;
+   b.textContent='SUMALI ✓';b.classList.add('ready');
+   const t=Math.floor(Math.random()*10);
+   players.forEach((p,i)=>{
+    p.x=Math.cos(i*Math.PI/5)*10;
+    p.z=Math.sin(i*Math.PI/5)*10;
+    p.mesh.position.set(p.x,.8,p.z);
+    p.role=i===t?'taya':'player';
+   });
+   msg.textContent='Simula na! Ihagis ang tsinelas!';
+   updateUI();
+  }
+ },180);
+};
+function bind(id,key){
+ const el=document.getElementById(id);
+ el.onpointerdown=e=>{e.preventDefault();keys[key]=true};
+ ['pointerup','pointercancel','pointerleave'].forEach(ev=>el.addEventListener(ev,()=>keys[key]=false));
+}
+bind('forward','w');bind('back','s');bind('left','a');bind('right','d');
+document.getElementById('run').onpointerdown=()=>sprinting=true;
+['pointerup','pointercancel','pointerleave'].forEach(ev=>document.getElementById('run').addEventListener(ev,()=>sprinting=false));
+
+function throwShoe(){
+ if(!started||!hasShoe)return;
+ hasShoe=false;
+ shoe=cube(me.x,1,me.z,.5,.12,.22,0x222222);
+ const vx=Math.sin(angle)*.7,vz=Math.cos(angle)*.7;
+ let t=0;
+ const fly=setInterval(()=>{
+  t++;shoe.position.x+=vx;shoe.position.z+=vz;
+  shoe.position.y=1+Math.sin(t*.4)*.3;
+  if(Math.hypot(shoe.position.x,shoe.position.z)<1.5||t>30){
+   clearInterval(fly);
+   if(Math.hypot(shoe.position.x,shoe.position.z)<2){
+    down=true;can.position.y=.15;
+    document.getElementById('msg').textContent='Natumba ang lata! Taya, kunin ito!';
+   }
+  }
+ },35);
+}
+document.getElementById('throw').onclick=throwShoe;
+
+let last=performance.now();
+function animate(now){
+ requestAnimationFrame(animate);
+ const dt=Math.min((now-last)/1000,.05);last=now;
+ if(started){
+  let dx=(keys.d?1:0)-(keys.a?1:0);
+  let dz=(keys.s?1:0)-(keys.w?1:0);
+  const speed=(sprinting?8:4)*dt;
+  me.x+=dx*speed;me.z+=dz*speed;
+  me.x=Math.max(-15,Math.min(15,me.x));
+  me.z=Math.max(-15,Math.min(15,me.z));
+  if(dx||dz)angle=Math.atan2(dx,dz);
+  me.mesh.position.set(me.x,.8,me.z);
+  me.mesh.rotation.y=angle;
+  for(let i=1;i<players.length;i++){
+   const p=players[i];
+   if(p.role==='taya'&&down){
+    const d=Math.hypot(p.x,p.z);
+    if(d>.5){p.x-=p.x/d*dt*3;p.z-=p.z/d*dt*3;}
+    else{
+     down=false;can.position.y=.5;
+     document.getElementById('msg').textContent='Nakuha ng Taya ang lata!';
+    }
+   }else{
+    const d=Math.hypot(p.x-me.x,p.z-me.z);
+    if(p.role==='taya'&&d>1){
+     p.x+=(me.x-p.x)/d*dt*2;
+     p.z+=(me.z-p.z)/d*dt*2;
+    }
+   }
+   p.mesh.position.set(p.x,.8,p.z);
+  }
+  if(me.role!=='taya'&&players.some(p=>p!==me&&p.role==='taya'&&Math.hypot(p.x-me.x,p.z-me.z)<1)){
+   me.role='taya';players.find(p=>p!==me&&p.role==='taya').role='player';
+   document.getElementById('msg').textContent='Nahuli ka! Ikaw na ang Taya!';
+  }
+  updateUI();
+ }
+ camera.position.lerp(new THREE.Vector3(me.x,5,me.z+8),.08);
+ camera.lookAt(me.x,1,me.z);
+ renderer.render(scene,camera);
+}
+requestAnimationFrame(animate);
+addEventListener('resize',()=>{
+ camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();
+ renderer.setSize(innerWidth,innerHeight);
+});
+</script>
+</body>
+  </html>
